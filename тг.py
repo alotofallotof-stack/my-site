@@ -6,7 +6,7 @@ import asyncio
 app = Flask(__name__)
 
 # --- НАСТРОЙКИ БОТА ---
-BOT_TOKEN = "6467020677"
+BOT_TOKEN = "9264156701:AAFS9etlfwo0SFR-fafjyeqlhF-bpF7qEEw"
 CHAT_ID = "9264156701:AAFS9etlfwo0SFR-fafjyeqlhF-bpF7qEEw"
 # --- НАСТРОЙКИ TELEGRAM API (с my.telegram.org) ---
 API_ID = 39783565  # Замени на свой api_id (число)

